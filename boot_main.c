@@ -55,8 +55,8 @@
 #include "sw_crc32.h"
 
 #define ENABLE_UART_PRINTF                              (1)
-#define ENABLE_UART_BL                                  (0)
-#define ENALBE_IICA0_BL                                 (1)
+#define ENABLE_UART_BL                                  (1)
+#define ENALBE_IICA0_BL                                 (0)
 
 
 /**** CPU frequency (MHz) ****/
