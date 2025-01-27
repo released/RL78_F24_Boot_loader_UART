@@ -55,8 +55,8 @@
 #include "sw_crc32.h"
 
 #define ENABLE_UART_PRINTF                              (1)
-#define ENABLE_UART_BL                                  (1)
-#define ENALBE_IICA0_BL                                 (0)
+#define ENABLE_UART_BL                                  (0)
+#define ENALBE_IICA0_BL                                 (1)
 
 
 /**** CPU frequency (MHz) ****/
@@ -123,6 +123,7 @@ static uint8_t checksum_calculate(uint8_t const * p_input, uint16_t data_len);
 static void assemble_error_data_packet(uint8_t * txdata, uint8_t associated_cmd, uint8_t error_code);
 static void encode16bit(uint32_t input_data, uint8_t * output_array);
 static uint16_t decode16bit(uint8_t * data);
+static uint32_t decode32bit(uint8_t * data);
 static bool Is_target_address_valid(uint8_t *data);
 #endif
 
@@ -202,57 +203,56 @@ uint8_t WriteCodeFlash(uint32_t u32_start_addr, uint8_t * u8_write_data, uint32_
  {
  	bool           l_e_sam_error_flag;
  	uint32_t       l_u32_count;
- 	// e_sample_ret_t l_e_sam_ret_value;
 
  	l_e_sam_error_flag = false;
 
     BSP_DI();
+
+    if ((u32_start_addr & (FLASH_BYTE_PER_BLOCK - 1)) == 0)
+    {      
+        Sample_CodeFlashControl_Erase(u32_start_addr);
+        #if 1
+        printf_tiny("(boot)I2C transfer:ERASE_MEMORY(0x%04X," , u32_start_addr>>16);
+        printf_tiny("0x%04X)\r\n" , u32_start_addr&0xFFFF);     
+        #endif
+    }   
+
+
     for (l_u32_count = 0u; (l_u32_count < u32_write_data_len) && (false == l_e_sam_error_flag);
         l_u32_count += 4u)
     {
         #if 1
-        Sample_CodeFlashControl_SingleWrite(u32_start_addr + l_u32_count, &u8_write_data[l_u32_count]);
+        Sample_CodeFlashControl_SingleWrite(u32_start_addr + l_u32_count + 0, &u8_write_data[l_u32_count]);
         #else
-        R_RFD_WriteCodeFlashReq(u32_start_addr + l_u32_count, &u8_write_data[l_u32_count]);
-        l_e_sam_ret_value = Sample_CheckCFDFSeqEnd();
+        // printf_tiny("(boot)I2C transfer:Write(0x%02X)" , l_u32_count);
+        // printf_tiny("0x%02X," , l_u32_count);
+        // printf_tiny("0x%04X," ,u32_start_addr>>16);
+        // printf_tiny("0x%04X:" ,u32_start_addr&0xFFFF);
+        // printf_tiny("0x%02X," ,i2c_downloader_ctrl.write_data_length);
 
-        if (SAMPLE_ENUM_RET_STS_OK != l_e_sam_ret_value)
-        {
-        l_e_sam_error_flag = true;
-        return SAMPLE_ENUM_RET_ERR_CMD_WRITE;
-        }
-        else
-        {
-            /* No operation */
-        }
+        // printf_tiny("0x%02X," , u8_write_data[l_u32_count + 0]);         
+        // printf_tiny("0x%02X," , u8_write_data[l_u32_count + 1]);         
+        // printf_tiny("0x%02X," , u8_write_data[l_u32_count + 2]);         
+        // printf_tiny("0x%02X," , u8_write_data[l_u32_count + 3]);   
+
+        // if ((l_u32_count+1)%16 ==0)
+        // {
+        //     printf("\r\n");
+        // }  
+
         #endif
+
     }
+
  	return SAMPLE_ENUM_RET_STS_OK;
  }
 
  void EraseCodeFlash(void)
- {
-	// e_sample_ret_t	l_e_sam_ret_value;
-    
+ {    
     BSP_DI();
     for (uint16_t i = FLASH_AREA/FLASH_BYTE_PER_BLOCK; i < FLASH_END_BLOCK; i++)	//0x1000/0x400=4, 32
     {
-        #if 1
         Sample_CodeFlashControl_Erase(i*FLASH_BYTE_PER_BLOCK);
-        #else
-        /* ERASE (1 block) */
-        R_RFD_EraseCodeFlashReq(i);
-        l_e_sam_ret_value = Sample_CheckCFDFSeqEnd();
-
-        if (SAMPLE_ENUM_RET_STS_OK != l_e_sam_ret_value)
-        {
-            // ErrorHandler(SAMPLE_ENUM_RET_ERR_CMD_ERASE);
-        }
-        else
-        {
-            /* No operation */
-        }
-        #endif
     }
  }
 
@@ -422,6 +422,7 @@ static void received_handler(i2c_downloader_ctrl_t * p_i2c_downloader_ctrl)
 {
     uint8_t     start_byte = p_i2c_downloader_ctrl->p_rxbuff[0]; //First byte is Generic Code or the header byte
     uint8_t     end_byte = p_i2c_downloader_ctrl->p_rxbuff[p_i2c_downloader_ctrl->rxbyteCnt - 1]; //End of packet
+    uint8_t     i = 0;
 
     p_i2c_downloader_ctrl->recv_cmd = p_i2c_downloader_ctrl->p_rxbuff[3];
 
@@ -465,14 +466,38 @@ static void received_handler(i2c_downloader_ctrl_t * p_i2c_downloader_ctrl)
 
         case ERASE_CMD_BYTE:
         {
-            if(false == Is_target_address_valid(&p_i2c_downloader_ctrl->p_rxbuff[4]))
-            {
-                p_i2c_downloader_ctrl->resp_type = ADDRESS_ERROR;
-                return;
-            }
+            // if(false == Is_target_address_valid(&p_i2c_downloader_ctrl->p_rxbuff[4]))
+            // {
+            //     p_i2c_downloader_ctrl->resp_type = ADDRESS_ERROR;
+            //     return;
+            // }
 
-            erase_area_start_address = decode16bit(&p_i2c_downloader_ctrl->p_rxbuff[6]);
-            erase_area_end_address = decode16bit(&p_i2c_downloader_ctrl->p_rxbuff[10]);
+            // erase_area_start_address = decode16bit(&p_i2c_downloader_ctrl->p_rxbuff[6]);
+            // erase_area_end_address = decode16bit(&p_i2c_downloader_ctrl->p_rxbuff[10]);
+
+            // erase_area_start_address = decode32bit(&p_i2c_downloader_ctrl->p_rxbuff[4]);
+            // erase_area_end_address = decode32bit(&p_i2c_downloader_ctrl->p_rxbuff[8]);
+
+            erase_area_start_address |= (unsigned long) p_i2c_downloader_ctrl->p_rxbuff[7]& 0xFF;
+            erase_area_start_address |= (unsigned long) p_i2c_downloader_ctrl->p_rxbuff[6]<< 8;
+            erase_area_start_address |= (unsigned long) p_i2c_downloader_ctrl->p_rxbuff[5]<< 16;
+            erase_area_start_address |= (unsigned long) p_i2c_downloader_ctrl->p_rxbuff[4]<< 24;
+
+            erase_area_end_address |= (unsigned long) p_i2c_downloader_ctrl->p_rxbuff[11]& 0xFF;
+            erase_area_end_address |= (unsigned long) p_i2c_downloader_ctrl->p_rxbuff[10]<< 8;
+            erase_area_end_address |= (unsigned long) p_i2c_downloader_ctrl->p_rxbuff[9]<< 16;
+            erase_area_end_address |= (unsigned long) p_i2c_downloader_ctrl->p_rxbuff[8]<< 24;               
+
+            // printf_tiny("(boot)received_handler erase_area_start:0x%04X," ,erase_area_start_address>>16);
+            // printf_tiny("0x%04X\r\n" ,erase_area_start_address&0xFFFF);
+            // printf_tiny("(boot)received_handler erase_area_end:0x%04X," ,erase_area_end_address>>16);
+            // printf_tiny("0x%04X\r\n" ,erase_area_end_address&0xFFFF);
+            // for( i = 0 ; i < 15; i++)
+            // {
+            //     printf_tiny("(boot)received_handler erase_area_end_address:(%d)" ,i);
+            //     printf_tiny("0x%02X\r\n" ,p_i2c_downloader_ctrl->p_rxbuff[i]);
+            // }
+
             p_i2c_downloader_ctrl->resp_type = ERASE_MEMORY;
             g_flash_operation_progressing = true;
             break;
@@ -483,14 +508,34 @@ static void received_handler(i2c_downloader_ctrl_t * p_i2c_downloader_ctrl)
             if(start_byte == COMMAND_PACKET_START)
             {
                 /* receive command packet of write transfer */
-                if(false == Is_target_address_valid(&p_i2c_downloader_ctrl->p_rxbuff[4]))
-                {
-                    p_i2c_downloader_ctrl->resp_type = ADDRESS_ERROR;
-                    return;
-                }
+                // if(false == Is_target_address_valid(&p_i2c_downloader_ctrl->p_rxbuff[4]))
+                // {
+                //     p_i2c_downloader_ctrl->resp_type = ADDRESS_ERROR;
+                //     return;
+                // }
 
-                flash_memory_start_address = decode16bit(&p_i2c_downloader_ctrl->p_rxbuff[6]);
-                flash_memory_end_address = decode16bit(&p_i2c_downloader_ctrl->p_rxbuff[10]);
+                // flash_memory_start_address = decode16bit(&p_i2c_downloader_ctrl->p_rxbuff[6]);
+                // flash_memory_end_address = decode16bit(&p_i2c_downloader_ctrl->p_rxbuff[10]);
+
+                // flash_memory_start_address = decode32bit(&p_i2c_downloader_ctrl->p_rxbuff[4]);
+                // flash_memory_end_address = decode32bit(&p_i2c_downloader_ctrl->p_rxbuff[8]);
+
+                flash_memory_start_address |= (unsigned long) p_i2c_downloader_ctrl->p_rxbuff[7]& 0xFF;
+                flash_memory_start_address |= (unsigned long) p_i2c_downloader_ctrl->p_rxbuff[6]<< 8;
+                flash_memory_start_address |= (unsigned long) p_i2c_downloader_ctrl->p_rxbuff[5]<< 16;
+                flash_memory_start_address |= (unsigned long) p_i2c_downloader_ctrl->p_rxbuff[4]<< 24;
+
+                flash_memory_end_address |= (unsigned long) p_i2c_downloader_ctrl->p_rxbuff[11]& 0xFF;
+                flash_memory_end_address |= (unsigned long) p_i2c_downloader_ctrl->p_rxbuff[10]<< 8;
+                flash_memory_end_address |= (unsigned long) p_i2c_downloader_ctrl->p_rxbuff[9]<< 16;
+                flash_memory_end_address |= (unsigned long) p_i2c_downloader_ctrl->p_rxbuff[8]<< 24;
+
+                // printf_tiny("(boot)received_handler flash_memory_start:0x%04X," ,flash_memory_start_address>>16);
+                // printf_tiny("0x%04X\r\n" ,flash_memory_start_address&0xFFFF);
+                
+                // printf_tiny("(boot)received_handler flash_memory_end:0x%04X," ,flash_memory_end_address>>16);
+                // printf_tiny("0x%04X\r\n" ,flash_memory_end_address&0xFFFF);
+
                 flash_memory_destination_address = flash_memory_start_address;
                 flash_target_memory_size = flash_memory_end_address - flash_memory_start_address + 1;
                 p_i2c_downloader_ctrl->resp_type = WRITE_MEMORY_START;
@@ -648,10 +693,15 @@ static void transmit_handler(i2c_downloader_ctrl_t * p_i2c_downloader_ctrl)
             //SAD (Start Address) => 0x5000 only needs 2 bytes
 			p_i2c_downloader_ctrl->p_txbuff[5] = 0;
 			p_i2c_downloader_ctrl->p_txbuff[6] = 0;
+			// p_i2c_downloader_ctrl->p_txbuff[7] = (uint8_t)(FLASH_AREA>>8);
+			// p_i2c_downloader_ctrl->p_txbuff[8] = (uint8_t)(FLASH_AREA&0xFF);
 			encode16bit(FLASH_AREA, &p_i2c_downloader_ctrl->p_txbuff[7]);
 			//EAD (End Address) => 0x3FFFF only needs 3 bytes
             #if 1
 			p_i2c_downloader_ctrl->p_txbuff[9] = 0;
+			// p_i2c_downloader_ctrl->p_txbuff[10] = (uint8_t)(FLASH_END_ADDRESS>>16);
+			// p_i2c_downloader_ctrl->p_txbuff[11] = (uint8_t)(FLASH_END_ADDRESS>>8);
+			// p_i2c_downloader_ctrl->p_txbuff[12] = (uint8_t)(FLASH_END_ADDRESS&0xFF);
 			encode16bit(FLASH_END_ADDRESS, &p_i2c_downloader_ctrl->p_txbuff[10]);
             #else
 			p_i2c_downloader_ctrl->p_txbuff[9] = 0;
@@ -898,6 +948,11 @@ static uint16_t decode16bit(uint8_t * data)
     return (uint16_t)( (data[1]) | (data[0] << 8) );
 }
 
+static uint32_t decode32bit(uint8_t * data)
+{
+    return (uint32_t)( (data[3]) | (data[2] << 8) | (data[1] << 16) | (data[0] << 24) );
+}
+
 static bool checksum_verification(uint8_t const * p_input, uint16_t frame_len)
 {
     uint8_t wCRC = 0;
@@ -986,8 +1041,8 @@ void boot_R_Config_IICA0_Create(void)
     POM6 |= 0x0CU;
     P6 &= 0xF3U;
     PM6 |= 0x0CU;
-    IICWL0 = _1A_IICA0_IICWL_VALUE;
-    IICWH0 = _18_IICA0_IICWH_VALUE;
+    IICWL0 = _0A_IICA0_IICWL_VALUE;
+    IICWH0 = _0A_IICA0_IICWH_VALUE;
     IICRSV0 = 1U;
     SMC0 = 1U;
     DFC0 = 0U;    /* digital filter off */
@@ -1083,9 +1138,6 @@ bool condition_check(void)
 
 	return status;
 }
-
-
-#if ENABLE_UART_BL
 
 // void _BusyWaitDelayMs(void)
 // {
@@ -1216,6 +1268,8 @@ void boot_UART1_SendByte(int c)
 //         boot_UART1_SendByte(*str++);   // Send each character in the string
 //     }
 // }
+
+#if ENABLE_UART_BL
 
 void boot_R_Config_UART1_Create(void)
 {
@@ -2022,13 +2076,13 @@ void boot_main(void)
 
             if(i32Err < 0)
             {
-                printf_tiny("(boot)Xmodem transfer fail! 0x%02X," ,i32Err>>16);
+                printf_tiny("(boot)Xmodem transfer fail! 0x%04X," ,i32Err>>16);
                 printf_tiny("0x%04X\r\n" ,i32Err&0xFFFF);
             }
             else
             {
                 printf_tiny("(boot)Xomdem transfer done!\r\n");
-                printf_tiny("(boot)Total trnasfer size is 0x%02X,", i32Err>>16);
+                printf_tiny("(boot)Total trnasfer size is 0x%04X,", i32Err>>16);
                 printf_tiny("0x%04X\r\n", i32Err&0xFFFF);
                 
                 //
@@ -2051,43 +2105,65 @@ void boot_main(void)
 
 			if(ERASE_MEMORY == i2c_downloader_ctrl.resp_type)
 			{
-                EraseCodeFlash();
-
-				g_flash_operation_progressing = false;
+                // EraseCodeFlash();
+				g_flash_operation_progressing = false;                
+                // printf_tiny("(boot)I2C transfer:ERASE_MEMORY bypass\r\n");
 			}
 
 			if(WRITE_MEMORY_NEXT == i2c_downloader_ctrl.resp_type)
-			{
+			{   
+                // printf_tiny("(boot)I2C transfer:WRITE_MEMORY_NEXT\r\n");
+
 				if ((flash_memory_destination_address >= flash_memory_start_address) &&
 					(flash_memory_destination_address < flash_memory_end_address))
 				{
 					status = WriteCodeFlash(flash_memory_destination_address,
 							(uint8_t __near *)&DataBuf[4], i2c_downloader_ctrl.write_data_length);
 
+                    #if 0   // debug
+                    printf_tiny("(boot)I2C transfer write! 0x%04X," ,flash_memory_destination_address>>16);
+                    printf_tiny("0x%04X," ,flash_memory_destination_address&0xFFFF);
+                    // printf_tiny("0x%02X\r\n" ,i2c_downloader_ctrl.write_data_length);
+                    printf_tiny("[0x%02X" ,DataBuf[4+i2c_downloader_ctrl.write_data_length-4]);
+                    printf_tiny(",0x%02X" ,DataBuf[4+i2c_downloader_ctrl.write_data_length-3]);
+                    printf_tiny(",0x%02X" ,DataBuf[4+i2c_downloader_ctrl.write_data_length-2]);
+                    printf_tiny(",0x%02X]\r\n" ,DataBuf[4+i2c_downloader_ctrl.write_data_length-1]);
+                    #endif
+
 					if (status == SAMPLE_ENUM_RET_STS_OK)	//PFSP: SAMPLE_ENUM_RET_STS_OK
 					{
 						/* if programming routine passed, then increase the flash address */
 						flash_memory_destination_address += i2c_downloader_ctrl.write_data_length;
 						flash_target_memory_size -= i2c_downloader_ctrl.write_data_length;
+
 						if(flash_memory_destination_address == (flash_memory_end_address+1))
 						{
 							/* end flash programming */
 							g_flash_operation_progressing = false;
+
+                            printf_tiny("(boot)I2C upgrade finish : Perform RST...\r\n");
+                            const unsigned char ILLEGAL_ACCESS_ON = 0x80;
+                            IAWCTL |= ILLEGAL_ACCESS_ON;            // switch IAWEN on (default off)
+                            *(__far volatile char *)0x00000 = 0x00; //write illegal address 0x00000(RESET VECTOR)
 						}
 					}
 					else
 					{
 						i2c_downloader_ctrl.resp_type = WRITE_ERROR;
+                        printf_tiny("(boot)I2C transfer:WRITE_ERROR\r\n");
+
 					}
 				}
 				else
 				{
 					i2c_downloader_ctrl.resp_type = PACKET_ERROR;
+                    printf_tiny("(boot)I2C transfer:PACKET_ERROR\r\n");
 				}
 			}
 
 			if(SWITCH_APP == i2c_downloader_ctrl.resp_type)
-			{
+			{                
+                printf_tiny("(boot)I2C transfer:SWITCH_APP\r\n");
 				if((flash_target_memory_size != 0)||(g_flash_operation_progressing))
 				{
 					CRC_ccitt = *(__far unsigned long *)CRC_ADDRESS;				    //0x7FFC

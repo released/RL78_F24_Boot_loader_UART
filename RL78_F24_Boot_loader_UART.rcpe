@@ -406,13 +406,12 @@
           <Option>-f</Option>
           <UpdateIOMode>None</UpdateIOMode>
         </IOHeaderGenerationOptions>
-        <NoTargetFile Target="src\smc_gen\Config_TAU0_0\Config_TAU0_0_user.c" />
-        <NoTargetFile Target="src\smc_gen\Config_TAU0_0\Config_TAU0_0.c" />
         <NoTargetFile Target="src\smc_gen\Config_PORT\Config_PORT.c" />
         <NoTargetFile Target="src\smc_gen\Config_PORT\Config_PORT_user.c" />
         <NoTargetFile Target="src\smc_gen\general\r_cg_systeminit.c" />
         <NoTargetFile Target="src\smc_gen\general\r_cg_sau_common.c" />
         <NoTargetFile Target="src\smc_gen\general\r_cg_iica_common.c" />
+        <NoTargetFile Target="src\smc_gen\general\r_cg_tau_common.c" />
         <NoTargetFile Target="src\smc_gen\r_bsp\board\generic_rl78_f24\hdwinit.c" />
         <NoTargetFile Target="src\smc_gen\r_bsp\board\generic_rl78_f24\r_bsp_init.c" />
         <NoTargetFile Target="src\smc_gen\r_bsp\board\generic_rl78_f24\stkinit.asm" />
@@ -426,12 +425,13 @@
         <NoTargetFile Target="src\smc_gen\Config_IICA0\Config_IICA0_user.c" />
         <NoTargetFile Target="src\smc_gen\Config_UART1\Config_UART1.c" />
         <NoTargetFile Target="src\smc_gen\Config_UART1\Config_UART1_user.c" />
+        <NoTargetFile Target="src\smc_gen\Config_TAU0_0\Config_TAU0_0.c" />
+        <NoTargetFile Target="src\smc_gen\Config_TAU0_0\Config_TAU0_0_user.c" />
         <NoTargetFile Target="RFDRL78T02\sample\common\source\dataflash\sample_control_data_flash.c" />
         <NoTargetFile Target="RFDRL78T02\sample\common\source\extra_fsw\sample_control_extra_fsw.c" />
         <NoTargetFile Target="RFDRL78T02\source\dataflash\r_rfd_data_flash_api.c" />
         <NoTargetFile Target="RFDRL78T02\source\extraarea\r_rfd_extra_area_api.c" />
         <NoTargetFile Target="RFDRL78T02\source\extraarea\r_rfd_extra_area_security_api.c" />
-        <NoTargetFile Target="src\smc_gen\general\r_cg_tau_common.c" />
       </BuildMode>
     </BuildOptions>
     <Extension_SmcCodePartRL78>
